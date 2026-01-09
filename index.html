@@ -1,1 +1,211 @@
-<h1>indika</h1>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0f172a">
+    
+    <title>Smart Home Pro</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --primary-green: #22c55e;
+            --primary-red: #ef4444;
+            --accent-blue: #3b82f6;
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            user-select: none; /* Prevents text selection while tapping */
+        }
+
+        .container {
+            width: 90%;
+            max-width: 380px;
+            background: var(--card-bg);
+            backdrop-filter: blur(15px);
+            border-radius: 30px;
+            padding: 25px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .status-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        
+        .status-badge {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: 0.3s;
+        }
+        .online { background: rgba(34, 197, 94, 0.15); color: var(--primary-green); border: 1px solid var(--primary-green); }
+        .offline { background: rgba(239, 68, 68, 0.15); color: var(--primary-red); border: 1px solid var(--primary-red); }
+
+        .control-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 24px;
+            padding: 25px;
+            margin: 20px 0;
+            text-align: center;
+            position: relative;
+        }
+
+        .spinner {
+            display: none;
+            width: 30px;
+            height: 30px;
+            border: 3px solid rgba(255,255,255,0.1);
+            border-radius: 50%;
+            border-top-color: var(--accent-blue);
+            animation: spin 0.8s linear infinite;
+            position: absolute;
+            top: 50px;
+            left: calc(50% - 15px);
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .feedback-label { font-size: 56px; font-weight: 800; margin: 15px 0; transition: 0.3s; }
+        .state-on { color: var(--primary-green); text-shadow: 0 0 20px rgba(34, 197, 94, 0.4); }
+        .state-off { color: #475569; }
+        .waiting { opacity: 0.2; transform: scale(0.9); }
+
+        .btn-group { display: flex; gap: 12px; }
+        .btn {
+            flex: 1;
+            padding: 18px;
+            border: none;
+            border-radius: 16px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.2s;
+            color: white;
+        }
+        .btn:active { transform: scale(0.92); }
+        .btn:disabled { opacity: 0.3; cursor: not-allowed; filter: grayscale(1); }
+        .btn-on { background: var(--primary-green); }
+        .btn-off { background: var(--primary-red); }
+
+        .info-item {
+            background: rgba(255, 255, 255, 0.03);
+            padding: 16px 20px;
+            border-radius: 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .info-value { font-weight: 700; font-size: 18px; color: var(--accent-blue); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="status-header">
+        <div id="conn-status" class="status-badge offline">OFFLINE</div>
+    </div>
+    
+    <h1 style="font-size: 22px; margin: 0;">Main Control</h1>
+    <div style="color: var(--text-dim); font-size: 13px; margin-top: 4px;">ESP32 Dashboard</div>
+
+    <div class="control-card">
+        <div id="loader" class="spinner"></div>
+        <div style="color: var(--text-dim); font-size: 14px;">Light Status</div>
+        <div id="light-val" class="feedback-label state-off">OFF</div>
+        
+        <div class="btn-group">
+            <button id="on-btn" class="btn btn-on" onclick="sendAction('ON')" disabled>ON</button>
+            <button id="off-btn" class="btn btn-off" onclick="sendAction('OFF')" disabled>OFF</button>
+        </div>
+    </div>
+
+    <div class="info-item">
+        <span style="color: var(--text-dim); font-size: 14px;">Environment</span>
+        <span id="temp-val" class="info-value">--°C</span>
+    </div>
+</div>
+
+<script>
+    const mqtt_url = 'wss://ed547099c3d54d41967308641f24dcae.s1.eu.hivemq.cloud:8884/mqtt';
+    const mqtt_opts = {
+        username: 'ESP32',
+        password: 'vICTORIYA@1980',
+        clientId: 'WebUser_' + Math.random().toString(16).substr(2, 4)
+    };
+
+    const client = mqtt.connect(mqtt_url, mqtt_opts);
+
+    const stateLabel = document.getElementById('light-val');
+    const loader = document.getElementById('loader');
+    const onBtn = document.getElementById('on-btn');
+    const offBtn = document.getElementById('off-btn');
+    const connStatus = document.getElementById('conn-status');
+
+    client.on('connect', () => {
+        client.subscribe('home/status');
+        client.subscribe('home/temperature');
+        client.subscribe('home/light/state');
+    });
+
+    client.on('message', (topic, message) => {
+        const payload = message.toString();
+
+        if (topic === 'home/light/state') {
+            loader.style.display = 'none';
+            stateLabel.classList.remove('waiting');
+            if (connStatus.innerText === 'DEVICE ACTIVE') {
+                onBtn.disabled = false;
+                offBtn.disabled = false;
+            }
+            stateLabel.innerText = payload;
+            stateLabel.className = (payload === 'ON') ? 'feedback-label state-on' : 'feedback-label state-off';
+            if (navigator.vibrate) navigator.vibrate([30, 50, 30]); // Confirmation pulse
+        }
+
+        if (topic === 'home/temperature') {
+            document.getElementById('temp-val').innerText = payload + '°C';
+        }
+
+        if (topic === 'home/status') {
+            if (payload === 'online') {
+                connStatus.innerText = 'DEVICE ACTIVE';
+                connStatus.className = 'status-badge online';
+                onBtn.disabled = false;
+                offBtn.disabled = false;
+            } else {
+                connStatus.innerText = 'DEVICE OFFLINE';
+                connStatus.className = 'status-badge offline';
+                onBtn.disabled = true;
+                offBtn.disabled = true;
+                loader.style.display = 'none';
+                stateLabel.classList.remove('waiting');
+            }
+        }
+    });
+
+    function sendAction(cmd) {
+        if (navigator.vibrate) navigator.vibrate(50); // Click pulse
+        loader.style.display = 'block';
+        stateLabel.classList.add('waiting');
+        onBtn.disabled = true;
+        offBtn.disabled = true;
+        client.publish('home/light', cmd, { retain: true });
+    }
+</script>
+</body>
+</html>
