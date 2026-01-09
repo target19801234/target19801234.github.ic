@@ -8,7 +8,13 @@
     <meta name="theme-color" content="#0f172a">
     
     <title>Smart Home Pro</title>
+
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="icon.png">
+    <link rel="apple-touch-icon" href="icon.png">
+
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    
     <style>
         :root {
             --bg-color: #0f172a;
@@ -21,7 +27,7 @@
         }
 
         body {
-            font-family: 'Segoe UI', system-ui, sans-serif;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-main);
             margin: 0;
@@ -29,7 +35,8 @@
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            user-select: none; /* Prevents text selection while tapping */
+            user-select: none;
+            overflow: hidden;
         }
 
         .container {
@@ -43,8 +50,13 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        .status-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        
+        .status-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
         .status-badge {
             padding: 6px 14px;
             border-radius: 20px;
@@ -52,7 +64,7 @@
             font-weight: 800;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            transition: 0.3s;
+            transition: all 0.3s ease;
         }
         .online { background: rgba(34, 197, 94, 0.15); color: var(--primary-green); border: 1px solid var(--primary-green); }
         .offline { background: rgba(239, 68, 68, 0.15); color: var(--primary-red); border: 1px solid var(--primary-red); }
@@ -80,7 +92,12 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        .feedback-label { font-size: 56px; font-weight: 800; margin: 15px 0; transition: 0.3s; }
+        .feedback-label {
+            font-size: 56px;
+            font-weight: 800;
+            margin: 15px 0;
+            transition: all 0.3s ease;
+        }
         .state-on { color: var(--primary-green); text-shadow: 0 0 20px rgba(34, 197, 94, 0.4); }
         .state-off { color: #475569; }
         .waiting { opacity: 0.2; transform: scale(0.9); }
@@ -94,13 +111,15 @@
             font-size: 16px;
             font-weight: 700;
             cursor: pointer;
-            transition: 0.2s;
+            transition: all 0.2s ease;
             color: white;
+            text-transform: uppercase;
         }
         .btn:active { transform: scale(0.92); }
-        .btn:disabled { opacity: 0.3; cursor: not-allowed; filter: grayscale(1); }
-        .btn-on { background: var(--primary-green); }
-        .btn-off { background: var(--primary-red); }
+        .btn:disabled { opacity: 0.2; cursor: not-allowed; filter: grayscale(1); }
+        
+        .btn-on { background: var(--primary-green); box-shadow: 0 4px 15px rgba(34, 197, 94, 0.2); }
+        .btn-off { background: var(--primary-red); box-shadow: 0 4px 15px rgba(239, 68, 68, 0.2); }
 
         .info-item {
             background: rgba(255, 255, 255, 0.03);
@@ -117,15 +136,15 @@
 
 <div class="container">
     <div class="status-header">
-        <div id="conn-status" class="status-badge offline">OFFLINE</div>
+        <div id="conn-status" class="status-badge offline">SYSTEM OFFLINE</div>
     </div>
     
-    <h1 style="font-size: 22px; margin: 0;">Main Control</h1>
-    <div style="color: var(--text-dim); font-size: 13px; margin-top: 4px;">ESP32 Dashboard</div>
+    <h1 style="font-size: 22px; margin: 0;">Smart Control</h1>
+    <p style="color: var(--text-dim); font-size: 13px; margin: 4px 0 0 0;">Secure ESP32 Node</p>
 
     <div class="control-card">
         <div id="loader" class="spinner"></div>
-        <div style="color: var(--text-dim); font-size: 14px;">Light Status</div>
+        <div style="color: var(--text-dim); font-size: 14px;">Main LED</div>
         <div id="light-val" class="feedback-label state-off">OFF</div>
         
         <div class="btn-group">
@@ -135,35 +154,40 @@
     </div>
 
     <div class="info-item">
-        <span style="color: var(--text-dim); font-size: 14px;">Environment</span>
+        <span style="color: var(--text-dim); font-size: 14px;">Temperature</span>
         <span id="temp-val" class="info-value">--°C</span>
     </div>
 </div>
 
 <script>
+    // --- OBFUSCATED CONFIG ---
+    const _p = 'dklDVE9SSVlBQDE5ODA='; 
     const mqtt_url = 'wss://ed547099c3d54d41967308641f24dcae.s1.eu.hivemq.cloud:8884/mqtt';
+    
     const mqtt_opts = {
         username: 'ESP32',
-        password: 'vICTORIYA@1980',
-        clientId: 'WebUser_' + Math.random().toString(16).substr(2, 4)
+        password: atob(_p),
+        clientId: 'AppUser_' + Math.random().toString(16).substr(2, 4),
+        keepalive: 60
     };
 
     const client = mqtt.connect(mqtt_url, mqtt_opts);
 
+    // --- ELEMENTS ---
     const stateLabel = document.getElementById('light-val');
     const loader = document.getElementById('loader');
     const onBtn = document.getElementById('on-btn');
     const offBtn = document.getElementById('off-btn');
     const connStatus = document.getElementById('conn-status');
+    const tempVal = document.getElementById('temp-val');
 
     client.on('connect', () => {
-        client.subscribe('home/status');
-        client.subscribe('home/temperature');
-        client.subscribe('home/light/state');
+        client.subscribe(['home/status', 'home/temperature', 'home/light/state']);
+        console.log("Connected to HiveMQ Cloud");
     });
 
     client.on('message', (topic, message) => {
-        const payload = message.toString();
+        const msg = message.toString();
 
         if (topic === 'home/light/state') {
             loader.style.display = 'none';
@@ -172,26 +196,22 @@
                 onBtn.disabled = false;
                 offBtn.disabled = false;
             }
-            stateLabel.innerText = payload;
-            stateLabel.className = (payload === 'ON') ? 'feedback-label state-on' : 'feedback-label state-off';
-            if (navigator.vibrate) navigator.vibrate([30, 50, 30]); // Confirmation pulse
+            stateLabel.innerText = msg;
+            stateLabel.className = (msg === 'ON') ? 'feedback-label state-on' : 'feedback-label state-off';
+            if (navigator.vibrate) navigator.vibrate([30, 50, 30]); 
         }
 
         if (topic === 'home/temperature') {
-            document.getElementById('temp-val').innerText = payload + '°C';
+            tempVal.innerText = msg + '°C';
         }
 
         if (topic === 'home/status') {
-            if (payload === 'online') {
-                connStatus.innerText = 'DEVICE ACTIVE';
-                connStatus.className = 'status-badge online';
-                onBtn.disabled = false;
-                offBtn.disabled = false;
-            } else {
-                connStatus.innerText = 'DEVICE OFFLINE';
-                connStatus.className = 'status-badge offline';
-                onBtn.disabled = true;
-                offBtn.disabled = true;
+            const isOnline = (msg === 'online');
+            connStatus.innerText = isOnline ? 'DEVICE ACTIVE' : 'DEVICE OFFLINE';
+            connStatus.className = isOnline ? 'status-badge online' : 'status-badge offline';
+            onBtn.disabled = !isOnline;
+            offBtn.disabled = !isOnline;
+            if (!isOnline) {
                 loader.style.display = 'none';
                 stateLabel.classList.remove('waiting');
             }
@@ -199,13 +219,18 @@
     });
 
     function sendAction(cmd) {
-        if (navigator.vibrate) navigator.vibrate(50); // Click pulse
+        if (navigator.vibrate) navigator.vibrate(50); 
         loader.style.display = 'block';
         stateLabel.classList.add('waiting');
         onBtn.disabled = true;
         offBtn.disabled = true;
         client.publish('home/light', cmd, { retain: true });
     }
+
+    client.on('error', (e) => {
+        connStatus.innerText = 'CONNECTION ERROR';
+        connStatus.className = 'status-badge offline';
+    });
 </script>
 </body>
 </html>
